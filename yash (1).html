@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Road Construction & Feedback Portal (Tiranga Theme)</title>
+    
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Load Chart.js for graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    
+    <!-- Load Google Maps API -->
+    <script async src="https://maps.googleapis.com/maps/api/js?key=&libraries=places&callback=initMap"></script>
+    <style>
+        /* Custom styles for mobile-first design and Tiranga Theme */
+        /* Set font to Calibre (Calibri) as preference, falling back to Inter and sans-serif */
+        body { 
+            font-family: 'Calibri', 'Inter', sans-serif; 
+            background-color: #f8fafc; /* Light gray/off-white background */
+        }
+        main { min-height: 80vh; }
+        
+        #map { height: 400px; width: 100%; border-radius: 0.75rem; }
+        
+        /* Tri-Color Navigation Buttons */
+        .tab-btn {
+            @apply px-4 py-3 text-xs sm:text-sm font-semibold rounded-lg text-gray-700 transition-all duration-200 whitespace-nowrap border border-gray-200 hover:bg-gray-100;
+        }
+        /* Active tab uses Saffron/Orange color */
+        .tab-btn.active {
+            @apply bg-orange-600 text-white shadow-lg shadow-orange-300/50 border-orange-600;
+        }
+        .dashboard-card {
+            @apply bg-white p-6 rounded-xl shadow-lg transition-all duration-300 hover:shadow-xl;
+        }
+        .rating-star {
+            color: #ffc107; /* Gold color for stars */
+            cursor: pointer;
+            transition: transform 0.1s ease;
+        }
+        .rating-star:hover {
+            transform: scale(1.1);
+        }
+        .reviews-container {
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+        .review-card {
+            @apply bg-gray-50 p-4 rounded-lg border-l-4 shadow-sm mb-4 transition-shadow duration-300 hover:shadow-md;
+        }
+        
+        /* Subtle tri-color border for the header */
+        .tri-color-header {
+            border-top: 5px solid #ff9933; /* Saffron */
+            border-bottom: 5px solid #138808; /* Green */
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <header class="text-center mb-10 py-4 tri-color-header bg-white rounded-xl shadow-md">
+        <h1 class="text-4xl font-extrabold text-gray-800">
+            Road Construction & Feedback Portal
+        </h1>
+        <p class="text-gray-500 mt-1 font-medium italic">Citizen Reviews for Infrastructure Excellence</p>
+    </header>
+
+    <main class="max-w-4xl mx-auto">
+        
+        <!-- Area Selection Screen -->
+        <section id="area-selection" class="text-center p-8 bg-white rounded-xl shadow-2xl">
+            <h2 class="text-2xl font-bold text-gray-700 mb-6">Select Your Municipal Area</h2>
+            <div class="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-8">
+                <!-- MBMC Button: Saffron Theme -->
+                <button onclick="showAreaDashboard('MBMC')" class="bg-orange-600 text-white p-4 rounded-xl shadow-lg shadow-orange-400/50 text-lg font-bold hover:bg-orange-700 transition-colors w-full sm:w-56">
+                    MBMC (Mira Bhayandar)
+                </button>
+                <!-- BMC Button: Green Theme -->
+                <button onclick="showAreaDashboard('BMC')" class="bg-green-600 text-white p-4 rounded-xl shadow-lg shadow-green-400/50 text-lg font-bold hover:bg-green-700 transition-colors w-full sm:w-56">
+                    BMC (Brihanmumbai)
+                </button>
+            </div>
+        </section>
+
+        <!-- Main Dashboard Content -->
+        <section id="area-dashboard" class="dashboard-content hidden">
+            <div class="flex justify-between items-center mb-6 border-b pb-4">
+                <h2 id="area-title" class="text-3xl font-extrabold text-gray-800"></h2>
+                <button onclick="showAreaSelection()" class="text-sm font-semibold text-orange-600 hover:text-orange-800 transition-colors flex items-center">
+                    ← Change Area
+                </button>
+            </div>
+            
+            <!-- Navigation Tabs -->
+            <nav class="flex justify-between space-x-2 mb-6 p-2 bg-white rounded-xl shadow-inner overflow-x-auto">
+                <button id="tab-map" onclick="showInnerTab('map-view')" class="tab-btn active">Project Map</button>
+                <button id="tab-reviews" onclick="showInnerTab('reviews-view')" class="tab-btn">Public Reviews</button>
+                <button id="tab-companies" onclick="showInnerTab('company-view')" class="tab-btn">Contractor Performance</button>
+            </nav>
+
+            <!-- 1. Map View -->
+            <div id="map-view" class="inner-content">
+                <h3 class="text-xl font-semibold text-gray-700 mb-4">Select a Project on Map to Report an Issue</h3>
+                <div id="map" class="mb-8 shadow-inner ring-4 ring-gray-100"></div>
+                
+                <!-- Project Info / Feedback Card -->
+                <div id="project-info" class="dashboard-card border-t-8 border-orange-600 hidden shadow-xl">
+                    <h4 class="text-2xl font-bold text-orange-600 mb-2" id="project-name">Project Name: Loading...</h4>
+                    <p class="text-sm text-gray-600 mb-3">Project ID: <span id="project-id-display" class="font-mono text-xs"></span></p>
+                    <p class="mb-4 text-gray-700">Contractor: <span id="company-name" class="font-extrabold text-green-700"></span></p>
+
+                    
+                    <hr class="my-4 border-gray-200">
+                    <h5 class="text-lg font-bold text-red-600 mb-3 flex items-center">
+                        Report Issue & Provide Feedback
+                    </h5>
+                    
+                    <form id="feedback-form" onsubmit="submitFeedback(event)">
+                        
+                        <!-- Rating Input -->
+                        <div class="mb-4">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Your Rating (1=Poor Road; 5=Excellent):</label>
+                            <div id="star-rating-input" class="text-3xl flex space-x-1">
+                                
+                            </div>
+                            <input type="hidden" id="rating-value" required value="0">
+                        </div>
+
+                        
+                        <!-- Comment Input -->
+                        <div class="mb-6">
+                            <label for="comment-input" class="block text-sm font-medium text-gray-700 mb-2">Describe the Road Condition / Issue:</label>
+                            <textarea id="comment-input" rows="4" required
+                                class="w-full border-2 border-gray-300 rounded-xl p-4 focus:ring-red-500 focus:border-red-500 text-sm shadow-inner"
+                                placeholder="E.g., 'Potholes are huge near the junction. Traffic is affected.'"></textarea>
+                        </div>
+                        
+                        <!-- Submit Button -->
+                        <button type="submit" class="w-full bg-red-600 text-white p-4 rounded-xl font-extrabold text-lg shadow-xl hover:bg-red-700 transition-colors transform hover:scale-[1.01]">
+                            Submit Review & Report Issue
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+            <!-- 2. Public Reviews View -->
+            <div id="reviews-view" class="inner-content hidden">
+                <h3 class="text-xl font-semibold text-gray-700 mb-4">Latest Public Reviews in <span class="font-bold text-orange-600" id="reviews-area-name"></span></h3>
+                <div id="recent-feedback-list" class="reviews-container rounded-xl p-2 shadow-inner bg-white">
+                    
+                    <p class="text-gray-500 text-center p-8">Loading recent reviews...</p>
+                </div>
+            </div>
+
+
+            <!-- 3. Company Performance View -->
+            <div id="company-view" class="inner-content hidden">
+                <h3 class="text-xl font-semibold text-gray-700 mb-4">Contractor Performance in <span class="font-bold text-orange-600" id="company-view-area-name"></span></h3>
+
+                
+                <div class="dashboard-card mb-8 border-t-8 border-green-600 shadow-xl">
+                    <h4 class="text-lg font-bold text-green-700 mb-4">Contractor Performance: Total 5-Star Reviews</h4>
+                    <div class="relative h-72">
+                        <canvas id="company-ratings-chart"></canvas>
+                    </div>
+                </div>
+
+                
+                <div id="company-list" class="space-y-4">
+                    <h4 class="text-lg font-extrabold text-gray-800 mb-4 border-b pb-2">Contractor Details (Sorted by Average Rating)</h4>
+                    <p id="company-loading-status" class="text-gray-500">Loading company data...</p>
+                </div>
+            </div>
+        </section>
+
+        
+        <!-- Global Message Modal (for alerts/confirmations) -->
+        <div id="global-message" class="fixed inset-0 bg-gray-900 bg-opacity-70 z-50 flex items-center justify-center hidden backdrop-blur-sm">
+            <div class="bg-white p-8 rounded-xl shadow-2xl w-11/12 max-w-sm transform transition-all duration-300 scale-100">
+                <p id="global-message-text" class="text-xl font-bold text-gray-800 mb-6"></p>
+                <button onclick="hideMessage()" class="w-full py-3 px-4 border border-transparent rounded-lg text-md font-bold text-white bg-orange-600 hover:bg-orange-700 shadow-md">
+                    Got it!
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <script type="module">
+        // --- Firebase Imports ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, setDoc, onSnapshot, collection, query, addDoc, runTransaction, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+
+        // --- Global Variables (MUST BE USED) ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // --- Global Application State ---
+        let app;
+        let db;
+        let auth;
+        let userId = 'anonymous'; 
+        let isAuthReady = false;
+        let currentArea = null; 
+        let currentProjectId = null; 
+        let currentCompanyId = null; 
+
+        let map; 
+        let mapsApiLoaded = false; 
+        let markers = {};
+        let allProjects = {}; 
+        let allCompanies = {}; 
+        let allFeedback = []; 
+        let companyRatingsChart;
+
+        // --- Constants for Firestore Paths ---
+        const PUBLIC_DATA_ROOT = `artifacts/${appId}/public/data`;
+        const PROJECTS_COLLECTION = `${PUBLIC_DATA_ROOT}/projects`;
+        const COMPANIES_COLLECTION = `${PUBLIC_DATA_ROOT}/companies`;
+        const FEEDBACK_COLLECTION = `${PUBLIC_DATA_ROOT}/feedback`;
+
+        // The image placeholder is kept in the data model for consistency but IS NOT rendered in the UI, as per user request.
+        const ISSUE_IMAGE_PLACEHOLDER = 'https://placehold.co/400x200/FF4444/FFFFFF?text=REPORTED+ISSUE+PHOTO';
+
+        // --- AREA DETAILS: UPDATED for specific map focus ---
+        const AREA_DETAILS = {
+            'MBMC': { 
+                name: 'MBMC (Mira Bhayandar / Mira Road & Bhayandar)', 
+                center: { lat: 19.3000, lng: 72.8500 }, 
+                zoom: 13 
+            },
+            'BMC': { 
+                name: 'BMC (Brihanmumbai / Suburban & City Area)', 
+                center: { lat: 19.0700, lng: 72.9000 }, 
+                zoom: 11 
+            }
+        };
+
+        // --- MOCK DATA (kept as an in-memory reference, seeding only runs once) ---
+        const MOCK_PROJECTS = [
+            { id: 'MBMC-001', name: 'NH-8 Service Road Repair (Mira Road)', companyId: 'CON-MBMC-04', areaId: 'MBMC', location: { lat: 19.3090, lng: 72.8600 } }, 
+            { id: 'MBMC-002', name: 'Kashimira Flyover Reconstruction (Mira Road)', companyId: 'CON-001', areaId: 'MBMC', location: { lat: 19.3000, lng: 72.8550 } }, 
+            { id: 'MBMC-003', name: 'Bhayandar West Coastal Road Paving (Bhayandar)', companyId: 'CON-002', areaId: 'MBMC', location: { lat: 19.2800, lng: 72.7950 } }, 
+            { id: 'MBMC-004', name: 'Naya Nagar Internal Roadworks (Mira Road)', companyId: 'CON-003', areaId: 'MBMC', location: { lat: 19.2750, lng: 72.8650 } }, 
+            
+            { id: 'BMC-001', name: 'Marine Drive Resurfacing (City Area)', companyId: 'CON-004', areaId: 'BMC', location: { lat: 18.9430, lng: 72.8257 } }, 
+            { id: 'BMC-002', name: 'Western Express Highway Patchwork (Suburban)', companyId: 'CON-005', areaId: 'BMC', location: { lat: 19.1800, lng: 72.8550 } }, 
+            { id: 'BMC-003', name: 'Bandra-Kurla Connector Bridge (Suburban)', companyId: 'CON-BMC-06', areaId: 'BMC', location: { lat: 19.0537, lng: 72.8687 } }, 
+        ];
+
+        const MOCK_COMPANIES = [
+            { id: 'CON-001', name: 'Aayush Builders and Pvt Limited', areaId: 'MBMC', tenderDetails: 'Awarded 3 major road contracts (2023-2025). Focus on Eastern areas.', averageRating: 0, totalRatings: 0, fiveStarCount: 0, logoUrl: 'https://placehold.co/50/FF8800/FFFFFF?text=Aayush' }, 
+            { id: 'CON-002', name: 'Aditya Construction', areaId: 'MBMC', tenderDetails: 'Expertise in flyovers and bridge works. Currently managing one large project.', averageRating: 0, totalRatings: 0, fiveStarCount: 0, logoUrl: 'https://placehold.co/50/138808/FFFFFF?text=Aditya' }, 
+            { id: 'CON-003', name: 'Swaraj Build Right Pvt Limited', areaId: 'MBMC', tenderDetails: 'Specializes in coastal road and drainage projects. High focus on quality.', averageRating: 0, totalRatings: 0, fiveStarCount: 0, logoUrl: 'https://placehold.co/50/0033A0/FFFFFF?text=Swaraj' },
+            { id: 'CON-MBMC-04', name: 'Aryan Consultancy', areaId: 'MBMC', tenderDetails: 'New entrant in the MBMC area, focusing on smaller internal road projects.', averageRating: 0, totalRatings: 0, fiveStarCount: 0, logoUrl: 'https://placehold.co/50/F0F000/000000?text=Aryan' },
+            { id: 'CON-MBMC-05', name: 'Anurag Developer', areaId: 'MBMC', tenderDetails: 'Specializes in laying underground drainage and utility lines beneath roads.', averageRating: 0, totalRatings: 0, fiveStarCount: 0, logoUrl: 'https://placehold.co/50/FF33AA/000000?text=Anurag' },
+
+            { id: 'CON-004', name: 'Shivang Build Pvt Ltd', areaId: 'BMC', tenderDetails: 'Major contractor for South Zone projects.', averageRating: 0, totalRatings: 0, fiveStarCount: 0, logoUrl: 'https://placehold.co/50/00AEEF/FFFFFF?text=Shivang' },
+            { id: 'CON-005', name: 'Hemant Roads Pvt Ltd', areaId: 'BMC', tenderDetails: 'Specializing in monsoon-resistant infrastructure.', averageRating: 0, totalRatings: 0, fiveStarCount: 0, logoUrl: 'https://placehold.co/50/EE00AA/FFFFFF?text=Hemant' },
+            { id: 'CON-BMC-06', name: 'Aman Tiwari Group of Constructions', areaId: 'BMC', tenderDetails: 'Awarded tender for various North Zone patching and repair works.', averageRating: 0, totalRatings: 0, fiveStarCount: 0, logoUrl: 'https://placehold.co/50/00FF88/FFFFFF?text=Aman' },
+        ];
+
+
+        // --- Navigation Functions ---
+
+        /** Shows the initial area selection screen. */
+        window.showAreaSelection = () => {
+            document.getElementById('area-dashboard').classList.add('hidden');
+            document.getElementById('area-selection').classList.remove('hidden');
+            currentArea = null;
+            currentProjectId = null;
+            document.getElementById('project-info').classList.add('hidden'); 
+            if (map) map.setOptions({ center: { lat: 0, lng: 0 }, zoom: 2 });
+            Object.values(markers).forEach(marker => marker.setMap(null));
+        };
+
+        /** Shows the selected area's dashboard and sets currentArea state. */
+        window.showAreaDashboard = (area) => {
+            currentArea = area;
+            document.getElementById('area-selection').classList.add('hidden');
+            document.getElementById('area-dashboard').classList.remove('hidden');
+            
+            document.getElementById('area-title').textContent = AREA_DETAILS[area].name + ' Projects';
+            document.getElementById('company-view-area-name').textContent = AREA_DETAILS[area].name;
+            document.getElementById('reviews-area-name').textContent = AREA_DETAILS[area].name;
+            
+            // Default to Map View
+            showInnerTab('map-view');
+            
+            // Initial map centering and marker update
+            centerMapOnArea();
+            updateMapMarkers();
+            renderCompanyDashboard();
+            updateCompanyRatingsChart();
+            renderRecentFeedback(); 
+        };
+
+        /** Toggles between the inner tabs. */
+        window.showInnerTab = (viewId) => {
+            // Hide all inner contents
+            document.querySelectorAll('.inner-content').forEach(el => el.classList.add('hidden'));
+            // Remove active class from all tabs
+            document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+
+            // Show the selected content and set the active tab
+            document.getElementById(viewId).classList.remove('hidden');
+            document.getElementById('tab-' + viewId.split('-')[0]).classList.add('active');
+
+            // FIX: Force map resize and re-center when switching to map-view
+            if (viewId === 'map-view' && map) {
+                // Use a small timeout to ensure the DOM has completed the visibility change
+                setTimeout(() => {
+                    google.maps.event.trigger(map, 'resize');
+                    centerMapOnArea(); // Re-center map to current area
+                }, 200); 
+            }
+
+            // Special case for graph view to re-render chart if needed
+            if (viewId === 'company-view' && companyRatingsChart) {
+                companyRatingsChart.update();
+            }
+        };
+
+
+        // --- Utility Functions ---
+
+        window.showMessage = (text) => {
+            document.getElementById('global-message-text').textContent = text;
+            document.getElementById('global-message').classList.remove('hidden');
+        };
+
+        window.hideMessage = () => {
+            document.getElementById('global-message').classList.add('hidden');
+        };
+
+        /** Renders a given rating value as stars (used for display only) */
+        const renderStars = (rating) => {
+            let stars = '';
+            const floorRating = Math.floor(rating);
+            for (let i = 0; i < 5; i++) {
+                if (i < floorRating) {
+                    stars += '<span class="rating-star">★</span>';
+                } else if (i < rating && rating < i + 1) {
+                    stars += '<span class="rating-star opacity-75">★</span>';
+                } else {
+                    stars += '<span class="text-gray-300">★</span>';
+                }
+            }
+            return stars;
+        };
+        
+        // --- Firestore Initialization and Authentication & Seeding (Mock Data Logic remains the same) ---
+
+        /** Initializes Firebase and authenticates the user. */
+        const initializeFirebase = async () => {
+            if (!firebaseConfig.apiKey) {
+                console.error("Firebase config is missing. Cannot initialize Firestore. Proceeding with UI load.");
+            }
+
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+
+                if (initialAuthToken) {
+                    await signInWithCustomToken(auth, initialAuthToken);
+                } else {
+                    await signInAnonymously(auth);
+                }
+
+                onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        userId = user.uid;
+                    } else {
+                        userId = crypto.randomUUID();
+                    }
+                    isAuthReady = true;
+                    // Only seed and start listeners if Firebase seems initialized
+                    if (firebaseConfig.apiKey) {
+                        setLogLevel('debug'); // Set log level for debugging firestore issues
+                        seedDatabaseIfEmpty();
+                        startDataListeners();
+                    } else {
+                         console.warn("Using fallback static mode due to missing Firebase configuration.");
+                    }
+                    // Crucial: Show the initial UI regardless of Firebase status
+                    showAreaSelection();
+                });
+
+            } catch (error) {
+                console.error("Firebase Initialization or Auth Error:", error);
+                showMessage(`Authentication Failed: ${error.message}. Displaying static UI.`);
+                showAreaSelection();
+            }
+        };
+        
+        /** Helper function to seed mock feedback entries for initial ratings. */
+        const seedMockFeedback = async () => {
+            const feedbackRef = collection(db, FEEDBACK_COLLECTION);
+            const feedbackData = [];
+            const timestamp = new Date().toISOString();
+
+            // Helper function to create reviews for a project and company, matching user's desired 5-star counts
+            const createReviews = (projectId, companyId, areaId, count5, countBad, countOther) => {
+                const companyName = MOCK_COMPANIES.find(c => c.id === companyId)?.name || "Contractor";
+                
+                // Add 5-star reviews
+                for(let i=0; i < count5; i++) {
+                     feedbackData.push({ projectId, companyId, areaId, userId: `user-5s-${companyId}-${i}`, rating: 5, comment: `Excellent work by ${companyName}! Flawless execution.`, mockImageUrl: null, timestamp });
+                }
+                // Add bad (1-star) reviews (for contrast and image placeholder testing)
+                for(let i=0; i < countBad; i++) {
+                     feedbackData.push({ projectId, companyId, areaId, userId: `user-1s-${companyId}-${i}`, rating: 1, comment: `Terrible quality. Potholes everywhere! This needs attention.`, mockImageUrl: ISSUE_IMAGE_PLACEHOLDER, timestamp });
+                }
+                // Add mixed (3-star) reviews
+                for(let i=0; i < countOther; i++) {
+                     feedbackData.push({ projectId, companyId, areaId, userId: `user-3s-${companyId}-${i}`, rating: 3, comment: `Average performance. Project completed on time, but not exceptional.`, mockImageUrl: null, timestamp });
+                }
+            };
+            
+            // --- MBMC Data Setup (Aligning with user's desired counts) ---
+            createReviews('MBMC-001', 'CON-MBMC-04', 'MBMC', 9, 1, 1); 
+            createReviews('MBMC-002', 'CON-001', 'MBMC', 6, 2, 2); 
+            createReviews('MBMC-003', 'CON-002', 'MBMC', 5, 3, 2); 
+            createReviews('MBMC-004', 'CON-003', 'MBMC', 4, 4, 1); 
+            createReviews('MBMC-002', 'CON-MBMC-05', 'MBMC', 0, 2, 0); 
+
+            // --- BMC Data Setup (Aligning with user's desired counts) ---
+            createReviews('BMC-001', 'CON-004', 'BMC', 2, 1, 1); 
+            createReviews('BMC-002', 'CON-005', 'BMC', 1, 5, 0); 
+            createReviews('BMC-003', 'CON-BMC-06', 'BMC', 0, 3, 2); 
+
+            
+            console.log("Seeding mock feedback data to set specific 5-star counts...");
+            for (const data of feedbackData) {
+                await addDoc(feedbackRef, data); 
+            }
+            console.log(`Successfully seeded ${feedbackData.length} mock feedback entries with specific 5-star counts.`);
+        };
+
+
+        /** Seeds the database with mock data if collections are empty. */
+        const seedDatabaseIfEmpty = async () => {
+            const projectsRef = collection(db, PROJECTS_COLLECTION);
+            const companiesRef = collection(db, COMPANIES_COLLECTION);
+
+            // Check if projects collection is empty
+            const projectSnap = await (async () => {
+                const tempQuery = query(projectsRef);
+                return await getDocs(tempQuery);
+            })();
+
+            if (projectSnap.empty) {
+                console.log("Seeding initial mock projects and companies data...");
+                for (const project of MOCK_PROJECTS) {
+                    const imageUrl = `https://placehold.co/400x200/cccccc/ffffff?text=${project.areaId}+${project.id}`;
+                    await setDoc(doc(projectsRef, project.id), { ...project, imageUrl });
+                }
+                for (const company of MOCK_COMPANIES) {
+                    const companyData = { ...company, averageRating: 0, totalRatings: 0, fiveStarCount: 0 }; 
+                    await setDoc(doc(companiesRef, company.id), companyData);
+                }
+                
+                // Check if feedback collection is empty before seeding mock feedback
+                const feedbackRef = collection(db, FEEDBACK_COLLECTION);
+                 const feedbackSnap = await (async () => {
+                    const tempQuery = query(feedbackRef);
+                    return await getDocs(tempQuery);
+                })();
+
+                if (feedbackSnap.empty) {
+                    await seedMockFeedback();
+                }
+            }
+        };
+
+
+        // --- Google Maps and Project Logic ---
+
+        /** Initializes the Google Map object once the API is loaded. */
+        window.initMap = () => {
+            mapsApiLoaded = true;
+            // Initialize map with a default global view.
+            map = new google.maps.Map(document.getElementById('map'), {
+                zoom: 2,
+                center: { lat: 0, lng: 0 },
+                gestureHandling: "greedy",
+            });
+            // If an area was selected before map loaded, center it now.
+            if(currentArea) {
+                centerMapOnArea();
+                updateMapMarkers();
+            }
+            setupStarRatingListeners(); 
+        };
+
+        /** Centers the map on the current selected area. */
+        const centerMapOnArea = () => {
+            if (!map || !currentArea) return;
+            const areaDetail = AREA_DETAILS[currentArea] || { center: { lat: 19.0, lng: 72.8 }, zoom: 10 };
+            map.setCenter(areaDetail.center);
+            map.setZoom(areaDetail.zoom);
+        }
+
+        /** Adds project markers to the map, filtered by the currentArea. */
+        const updateMapMarkers = () => {
+            if (!map || !currentArea) return;
+            if (!mapsApiLoaded) {
+                 return;
+            }
+
+            Object.values(markers).forEach(marker => marker.setMap(null));
+            markers = {};
+
+            Object.values(allProjects)
+                .filter(project => project.areaId === currentArea)
+                .forEach(project => {
+                
+                const marker = new google.maps.Marker({
+                    position: { lat: project.location.lat, lng: project.location.lng },
+                    map: map,
+                    title: project.name,
+                    icon: {
+                        path: google.maps.SymbolPath.CIRCLE,
+                        fillColor: '#FF9933', /* Saffron marker color */
+                        fillOpacity: 0.9,
+                        scale: 8,
+                        strokeColor: 'white',
+                        strokeWeight: 2
+                    }
+                });
+
+                marker.addListener("click", () => {
+                    displayProjectDetails(project);
+                });
+
+                markers[project.id] = marker;
+            });
+        };
+
+        /** Displays the selected project details and prepares the form. */
+        const displayProjectDetails = (project) => {
+            const infoBox = document.getElementById('project-info');
+            infoBox.classList.remove('hidden');
+
+            const company = allCompanies[project.companyId] || { name: 'N/A', id: 'N/A' };
+            
+            // Set global state for the form submission
+            currentProjectId = project.id;
+            currentCompanyId = company.id;
+
+            document.getElementById('project-name').textContent = project.name;
+            document.getElementById('project-id-display').textContent = project.id;
+            document.getElementById('company-name').textContent = company.name;
+            
+            // Reset the form on project selection
+            document.getElementById('feedback-form').reset();
+            updateStarDisplay(0);
+            document.getElementById('rating-value').value = 0;
+
+
+            map.panTo(markers[project.id].getPosition());
+            // Adjust zoom to be closer when specific project is selected
+            if (map.getZoom() < 15) {
+                map.setZoom(15);
+            }
+        };
+
+        // --- Feedback Form Logic ---
+        
+        /** Generates star icons and sets up event listeners for rating input. */
+        const setupStarRatingListeners = () => {
+            const container = document.getElementById('star-rating-input');
+            const ratingInput = document.getElementById('rating-value');
+            
+            // Generate stars
+            for (let i = 1; i <= 5; i++) {
+                const star = document.createElement('span');
+                star.classList.add('rating-star', 'text-gray-300');
+                star.textContent = '★';
+                star.dataset.rating = i;
+                
+                // Click handler
+                star.addEventListener('click', () => {
+                    ratingInput.value = i;
+                    updateStarDisplay(i);
+                });
+                
+                // Hover handlers (for better UX)
+                star.addEventListener('mouseover', () => updateStarDisplay(i, true));
+                star.addEventListener('mouseout', () => updateStarDisplay(parseInt(ratingInput.value) || 0));
+
+                container.appendChild(star);
+            }
+        };
+
+        /** Updates the visual appearance of the stars based on a selected rating. */
+        const updateStarDisplay = (rating, isHover = false) => {
+            const stars = document.getElementById('star-rating-input').querySelectorAll('.rating-star');
+            
+            stars.forEach(star => {
+                const starRating = parseInt(star.dataset.rating);
+                if (starRating <= rating) {
+                    star.classList.remove('text-gray-300');
+                    star.classList.add('text-yellow-500');
+                } else {
+                    star.classList.remove('text-yellow-500');
+                    star.classList.add('text-gray-300');
+                }
+            });
+        };
+
+        /** Handles the form submission to save feedback to Firestore. */
+        window.submitFeedback = async (event) => {
+            event.preventDefault();
+            
+            if (!isAuthReady || !db) {
+                showMessage("Database connection not ready. Please try again in a moment.");
+                return;
+            }
+
+            const rating = parseInt(document.getElementById('rating-value').value);
+            const comment = document.getElementById('comment-input').value.trim();
+            
+            if (rating === 0) {
+                showMessage("Please select a star rating (1 to 5) before submitting your review.");
+                return;
+            }
+            if (comment.length < 5) {
+                showMessage("Please provide a meaningful comment (at least 5 characters) about the road condition.");
+                return;
+            }
+
+            if (!currentProjectId || !currentCompanyId || !currentArea) {
+                 showMessage("Error: No project selected. Please click a marker on the map first.");
+                 return;
+            }
+
+            const feedbackData = {
+                projectId: currentProjectId,
+                companyId: currentCompanyId,
+                areaId: currentArea,
+                userId: userId, 
+                rating: rating,
+                comment: comment,
+                timestamp: new Date().toISOString(),
+                // mockImageUrl is intentionally set to null, following user's previous request
+                mockImageUrl: null 
+            };
+
+            const feedbackRef = collection(db, FEEDBACK_COLLECTION);
+
+            try {
+                await addDoc(feedbackRef, feedbackData);
+                document.getElementById('feedback-form').reset();
+                updateStarDisplay(0);
+                document.getElementById('rating-value').value = 0;
+                
+                let successMessage = `Thank you! Your ${rating}-star review has been submitted for Project ${currentProjectId}.`;
+                showMessage(successMessage);
+
+            } catch (error) {
+                console.error("Error submitting feedback:", error);
+                showMessage(`Submission Failed: Unable to save feedback to the database. Error: ${error.message}`);
+            }
+        };
+
+
+        // --- Dashboard and Chart Logic ---
+
+        /** Renders the Public Reviews & Comments list. */
+        const renderRecentFeedback = () => {
+            if (!currentArea) return;
+            const listEl = document.getElementById('recent-feedback-list');
+            listEl.innerHTML = '';
+            
+            const filteredFeedback = allFeedback
+                .filter(f => f.areaId === currentArea) 
+                .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); 
+
+            if (filteredFeedback.length === 0) {
+                listEl.innerHTML = '<p class="text-gray-500 text-center p-8">No public reviews submitted for this area yet.</p>';
+                return;
+            }
+
+            filteredFeedback.forEach(feedback => {
+                const project = allProjects[feedback.projectId] || { name: 'Unknown Project' };
+                const company = allCompanies[feedback.companyId] || { name: 'Unknown Contractor' };
+                
+                const isGoodReview = feedback.rating >= 4; // High standard for 'Good'
+                let borderClass = isGoodReview ? 'border-green-600 shadow-green-100/50' : (feedback.rating >= 2 ? 'border-orange-500 shadow-orange-100/50' : 'border-red-600 shadow-red-100/50');
+                const statusText = isGoodReview ? 'Excellent' : (feedback.rating >= 2 ? 'Average' : 'Critical');
+                const statusColor = isGoodReview ? 'text-green-700' : (feedback.rating >= 2 ? 'text-orange-600' : 'text-red-600');
+
+                
+                const card = document.createElement('div');
+                card.className = `review-card ${borderClass}`;
+                card.innerHTML = `
+                    <div class="flex justify-between items-start">
+                        <p class="text-xs text-gray-500 font-mono">User: ${feedback.userId.substring(0, 8)}... (${new Date(feedback.timestamp).toLocaleDateString()})</p>
+                        <p class="font-extrabold ${statusColor} text-sm">${statusText}</p>
+                    </div>
+                    
+                    <h4 class="text-lg font-bold text-gray-800 mt-1">${project.name}</h4>
+                    <p class="text-sm text-gray-600 mb-3">Contractor: <span class="font-medium text-indigo-700">${company.name}</span></p>
+                    
+                    <div class="mb-3">${renderStars(feedback.rating)}</div>
+                    
+                    <p class="text-sm italic text-gray-700">"${feedback.comment}"</p>
+                `;
+                listEl.appendChild(card);
+            });
+        };
+
+        /** Renders the company list dashboard, filtered by the currentArea. */
+        const renderCompanyDashboard = () => {
+            if (!currentArea) return;
+            const listEl = document.getElementById('company-list');
+            listEl.innerHTML = '';
+
+            const companiesArray = Object.values(allCompanies)
+                .filter(c => c.areaId === currentArea)
+                .sort((a, b) => b.averageRating - a.averageRating); 
+
+            companiesArray.forEach(company => {
+                const companyFeedbackCount = company.totalRatings || 0;
+                const fiveStarCountDisplay = company.fiveStarCount !== undefined ? `(${company.fiveStarCount} Five-Star Reviews)` : '';
+                
+                const card = document.createElement('div');
+                card.className = 'dashboard-card border-l-8 flex flex-col md:flex-row items-start md:items-center space-y-4 md:space-y-0 md:space-x-4'; 
+                
+                // Determine the border color based on the rating (4-5 green, <4 orange/red)
+                const borderClass = company.averageRating >= 4 ? 'border-green-600' : (company.averageRating > 0 ? 'border-orange-500' : 'border-gray-300');
+
+                card.classList.add(borderClass); 
+                card.innerHTML = `
+                    <div class="flex-shrink-0 flex items-center space-x-4 w-full md:w-auto">
+                        <img src="${company.logoUrl || 'https://placehold.co/50/CCCCCC/FFFFFF?text=Logo'}" alt="${company.name} Logo" class="w-12 h-12 rounded-full object-cover flex-shrink-0 ring-2 ring-gray-200">
+                        <h4 class="text-xl font-bold text-gray-800">${company.name}</h4>
+                    </div>
+                    <div class="flex-grow">
+                        <div class="flex items-center space-x-2 my-2">
+                            <span class="text-3xl font-extrabold text-orange-600">${company.averageRating ? company.averageRating.toFixed(2) : 'N/A'}</span>
+                            <div class="text-sm">
+                                <p class="text-gray-500">${renderStars(company.averageRating)}</p>
+                                <p class="text-xs text-gray-500 font-medium">(${companyFeedbackCount} Public Reviews) <span class="text-green-700 font-bold">${fiveStarCountDisplay}</span></p>
+                            </div>
+                        </div>
+                        <p class="text-sm text-gray-600">${company.tenderDetails}</p>
+                    </div>
+                `;
+                listEl.appendChild(card);
+            });
+            if (companiesArray.length === 0) {
+                 listEl.innerHTML = '<p class="text-gray-500">No companies found for this area or still loading data.</p>';
+            }
+        };
+
+        /** Initializes or updates the Chart.js graph for company ratings. Now shows 5-Star Counts. */
+        const updateCompanyRatingsChart = () => {
+            if (!currentArea) return;
+            
+            const canvasEl = document.getElementById('company-ratings-chart');
+            const companiesArray = Object.values(allCompanies)
+                .filter(c => c.areaId === currentArea)
+                .sort((a, b) => b.fiveStarCount - a.fiveStarCount); 
+
+            const labels = companiesArray.map(c => c.name);
+            const data = companiesArray.map(c => c.fiveStarCount || 0); 
+            
+            const maxFiveStars = Math.max(...data, 1); 
+            const countColors = data.map(count => {
+                const ratio = count / maxFiveStars;
+                if (count === 0) return '#EF4444'; // Red for zero
+                if (ratio >= 0.75) return '#10B981'; // Dark Green for high performance
+                if (ratio >= 0.5) return '#F97316'; // Orange for moderate
+                return '#FCD34D'; // Yellow for low
+            });
+
+
+            const chartData = {
+                labels: labels,
+                datasets: [{
+                    label: 'Count of 5-Star Ratings', 
+                    data: data,
+                    backgroundColor: countColors, 
+                    borderColor: '#fff',
+                    borderWidth: 1
+                }]
+            };
+
+            const chartOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                indexAxis: 'y', 
+                scales: {
+                    x: {
+                        beginAtZero: true,
+                        title: { display: true, text: 'Total 5-Star Ratings', color: '#374151', font: { weight: 'bold' } } 
+                    },
+                    y: {
+                         ticks: { color: '#374151' }
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { 
+                        callbacks: { 
+                            label: (context) => `5-Star Count: ${context.raw}` 
+                        } 
+                    }
+                }
+            };
+
+            if (companyRatingsChart) {
+                companyRatingsChart.data = chartData;
+                companyRatingsChart.update();
+            } else {
+                companyRatingsChart = new Chart(canvasEl, {
+                    type: 'bar',
+                    data: chartData,
+                    options: chartOptions
+                });
+            }
+        };
+
+        /** Calculates and updates a company's average rating and 5-star count in Firestore. */
+        const updateCompanyRating = async (companyId) => {
+            if (!db || !isAuthReady) return; 
+
+            let totalRatingSum = 0;
+            let ratingCount = 0;
+            let fiveStarCount = 0; 
+
+            allFeedback.forEach(feedback => { 
+                if (feedback.companyId === companyId) {
+                    totalRatingSum += feedback.rating;
+                    ratingCount++;
+                    if (feedback.rating === 5) { 
+                        fiveStarCount++;
+                    }
+                }
+            });
+
+            const newAvgRating = ratingCount > 0 ? totalRatingSum / ratingCount : 0;
+            
+            const companyRef = doc(db, COMPANIES_COLLECTION, companyId);
+            try {
+                await runTransaction(db, async (transaction) => {
+                    const companyDoc = await transaction.get(companyRef);
+                    if (companyDoc.exists()) {
+                        transaction.update(companyRef, { 
+                            averageRating: newAvgRating,
+                            totalRatings: ratingCount,
+                            fiveStarCount: fiveStarCount 
+                        });
+                    }
+                });
+            } catch (error) {
+                console.error(`Transaction failed for company ${companyId}:`, error);
+            }
+        };
+
+        // --- Real-time Data Listeners ---
+
+        /** Sets up real-time listeners for all necessary collections. */
+        const startDataListeners = () => {
+            if (!isAuthReady || !db) return;
+
+            // 1. Projects Listener
+            onSnapshot(collection(db, PROJECTS_COLLECTION), (snapshot) => {
+                allProjects = {};
+                snapshot.forEach(doc => { allProjects[doc.id] = doc.data(); });
+                updateMapMarkers();
+            }, (error) => console.error("Projects Listener Error:", error));
+
+            // 2. Companies Listener 
+            onSnapshot(collection(db, COMPANIES_COLLECTION), (snapshot) => {
+                allCompanies = {};
+                snapshot.forEach(doc => { allCompanies[doc.id] = doc.data(); });
+                if (currentArea) {
+                    renderCompanyDashboard();
+                    updateCompanyRatingsChart();
+                }
+            }, (error) => console.error("Companies Listener Error:", error));
+
+            // 3. Feedback Listener (stores all feedback and triggers rendering of comment list/rating updates)
+            onSnapshot(collection(db, FEEDBACK_COLLECTION), (snapshot) => {
+                console.log("New feedback received. Updating comment feed and ratings...");
+                allFeedback = [];
+                snapshot.forEach(doc => { allFeedback.push(doc.data()); });
+
+                // Trigger recalculation for ALL companies since any feedback could affect any company
+                Object.values(allCompanies).forEach(c => updateCompanyRating(c.id));
+                
+                // Update the public comments section
+                if (currentArea) {
+                    renderRecentFeedback();
+                }
+            }, (error) => console.error("Feedback Listener Error:", error));
+        };
+
+        // --- Event Listeners and Initial Setup ---
+
+        initializeFirebase();
+
+    </script>
+</body>
+</html>
